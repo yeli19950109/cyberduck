@@ -22,9 +22,9 @@ while IFS= read -r -d '' binary; do
   codesign --force --sign - "$binary"
 done < <(find "$app" -type f \( -name '*.dylib' -o -name '*.jnilib' -o -name jspawnhelper \) -print0)
 codesign --force --deep --sign - "$app"
-# Keep the app group declaration so macOS can request access to existing bookmarks.
+# The fork uses its own Application Support folder, without claiming the upstream app group.
 # Apply application entitlements only to the outer app, not to its nested libraries.
-codesign --force --sign - --entitlements setup/app/default.entitlements "$app"
+codesign --force --sign - --entitlements setup/app/fork.entitlements "$app"
 codesign --verify --deep --strict "$app"
 
 mkdir -p osx/target/release

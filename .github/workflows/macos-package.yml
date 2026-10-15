@@ -125,7 +125,10 @@ jobs:
 
           The PKG and ZIP use ad hoc application signatures and are not Apple-notarized.
           Sparkle updates use this fork's independent Ed25519 signing key.
-          macOS may ask for access to existing Cyberduck bookmarks in its protected app group.
+          Connection data is stored in ~/Library/Application Support/CyberSilverWolf.
+          Use Bookmarks → Import Bookmarks… to copy selected .duck files or a Bookmarks folder.
+          Original files are preserved; Full Disk Access is not required for normal operation.
+          If macOS denies access to the old folder, export bookmarks from the official app and import those copies.
 
           Commit: $GITHUB_SHA
           Build: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID

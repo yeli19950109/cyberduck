@@ -28,6 +28,7 @@ import ch.cyberduck.binding.application.NSCell;
 import ch.cyberduck.binding.application.NSImage;
 import ch.cyberduck.binding.application.NSMenu;
 import ch.cyberduck.binding.application.NSMenuItem;
+import ch.cyberduck.binding.application.NSOpenPanel;
 import ch.cyberduck.binding.application.NSPasteboard;
 import ch.cyberduck.binding.application.NSPopUpButton;
 import ch.cyberduck.binding.application.NSView;
@@ -42,6 +43,7 @@ import ch.cyberduck.binding.foundation.NSAttributedString;
 import ch.cyberduck.binding.foundation.NSDictionary;
 import ch.cyberduck.binding.foundation.NSNotification;
 import ch.cyberduck.binding.foundation.NSObject;
+import ch.cyberduck.binding.foundation.NSURL;
 import ch.cyberduck.core.*;
 import ch.cyberduck.core.aquaticprime.DonationKey;
 import ch.cyberduck.core.aquaticprime.License;
@@ -437,8 +439,98 @@ public class MainController extends BundleController implements NSApplication.De
 
     public void setBookmarkMenu(NSMenu bookmarkMenu) {
         this.bookmarkMenu = bookmarkMenu;
-        this.bookmarkMenuDelegate = new BookmarkMenuDelegate();
+        this.bookmarkMenuDelegate = new BookmarkMenuDelegate() {
+            @Override
+            public void menuNeedsUpdate(final NSMenu menu) {
+                super.menuNeedsUpdate(menu);
+                if(menu.itemWithTag(new NSInteger(7301)) == null) {
+                    menu.addItem(NSMenuItem.separatorItem());
+                    final NSMenuItem item = menu.addItemWithTitle_action_keyEquivalent(
+                            String.format("%s %s…", LocaleFactory.localizedString("Import", "Configuration"), LocaleFactory.localizedString("Bookmarks")),
+                            Foundation.selector("importBookmarksMenuClicked:"), StringUtils.EMPTY);
+                    item.setTag(7301);
+                    item.setTarget(MainController.this.id());
+                }
+            }
+        };
         this.bookmarkMenu.setDelegate(bookmarkMenuDelegate.id());
+    }
+
+    private NSOpenPanel bookmarkImportPanel;
+    private boolean importingBookmarks;
+
+    @Action
+    public void importBookmarksMenuClicked(final ID sender) {
+        if(bookmarkImportPanel != null || importingBookmarks || !BookmarkCollection.defaultCollection().isLoaded()) {
+            return;
+        }
+        final BrowserController browser = this.getBrowser() == null ? newDocument() : this.getBrowser();
+        browser.display();
+        bookmarkImportPanel = NSOpenPanel.openPanel();
+        bookmarkImportPanel.setCanChooseFiles(true);
+        bookmarkImportPanel.setCanChooseDirectories(true);
+        bookmarkImportPanel.setAllowsMultipleSelection(true);
+        bookmarkImportPanel.setAllowedFileTypes(NSArray.arrayWithObject("duck"));
+        bookmarkImportPanel.setPrompt(LocaleFactory.localizedString("Import", "Configuration"));
+        bookmarkImportPanel.setMessage(LocaleFactory.localizedString(
+                "Choose .duck bookmark files or a Bookmarks folder. Original files will be kept. If the old folder is unavailable, export bookmarks from the original app first."));
+        bookmarkImportPanel.beginSheetForDirectory(null, null, browser.window(), this.id(),
+                Foundation.selector("bookmarkImportPanelDidEnd:returnCode:contextInfo:"), null);
+    }
+
+    @Action
+    public void bookmarkImportPanelDidEnd_returnCode_contextInfo(final NSOpenPanel sheet, final int returncode, final ID contextInfo) {
+        try {
+            if(returncode != SheetCallback.DEFAULT_OPTION) {
+                return;
+            }
+            final List<NSURL> urls = new ArrayList<>();
+            final NSArray selected = sheet.URLs();
+            for(int i = 0; i < selected.count().intValue(); i++) {
+                urls.add(Rococoa.cast(selected.objectAtIndex(new NSUInteger(i)), NSURL.class));
+            }
+            importingBookmarks = true;
+            this.background(new AbstractBackgroundAction<Integer>() {
+                @Override
+                public Integer run() throws BackgroundException {
+                    final List<NSURL> scoped = new ArrayList<>();
+                    try {
+                        final List<Local> selection = new ArrayList<>();
+                        for(NSURL url : urls) {
+                            if(url.startAccessingSecurityScopedResource()) {
+                                scoped.add(url);
+                            }
+                            selection.add(LocalFactory.get(url.path()));
+                        }
+                        return new CyberduckBookmarkImporter().copy(selection, BookmarkCollection.defaultCollection().getFolder(), this::isCanceled);
+                    }
+                    finally {
+                        for(NSURL url : scoped) {
+                            url.stopAccessingSecurityScopedResource();
+                        }
+                        // Also show successfully copied files after a partial I/O failure.
+                        BookmarkCollection.defaultCollection().load();
+                    }
+                }
+
+                @Override
+                public void cleanup(final Integer result, final BackgroundException failure) {
+                    importingBookmarks = false;
+                    if(this.isCanceled()) {
+                        return;
+                    }
+                    final String message = failure == null
+                            ? MessageFormat.format(LocaleFactory.localizedString("{0} bookmarks imported. Existing bookmarks were kept."), result)
+                            : String.format("%s\n%s\n\n%s", failure.getMessage(), failure.getDetail(), LocaleFactory.localizedString(
+                                    "Some bookmarks could not be imported. Export them from the original app, then select the exported .duck files here. Files already imported are kept."));
+                    MainController.this.alert(new SystemAlertController(NSAlert.alert(LocaleFactory.localizedString("Bookmarks"),
+                            message, LocaleFactory.localizedString("OK"), null, null)));
+                }
+            });
+        }
+        finally {
+            bookmarkImportPanel = null;
+        }
     }
 
     @Action
@@ -909,8 +1001,11 @@ public class MainController extends BundleController implements NSApplication.De
                     MainController.this.alert(new SystemAlertController(NSAlert.alert(
                             LocaleFactory.localizedString("Bookmarks"),
                             String.format("%s\n%s\n\n%s", failure.getMessage(), failure.getDetail(),
-                                    LocaleFactory.localizedString("Allow access to your bookmarks in System Settings → Privacy & Security, then restart Cyberduck.")),
+                                    LocaleFactory.localizedString("Use Bookmarks → Import Bookmarks to copy saved connections from files you select.")),
                             LocaleFactory.localizedString("OK"), null, null)));
+                }
+                else if(preferences.getBoolean("bookmark.import.onstartup")) {
+                    importBookmarksMenuClicked(null);
                 }
             }
         });
@@ -1003,7 +1098,9 @@ public class MainController extends BundleController implements NSApplication.De
             }
         });
         // Import thirdparty bookmarks.
-        this.background(new ImporterBackgroundAction(bookmarks, bookmarksSemaphore));
+        if(preferences.getDefault("CyberduckForkDataFolder") == null) {
+            this.background(new ImporterBackgroundAction(bookmarks, bookmarksSemaphore));
+        }
         final CrashReporter reporter = CrashReporter.create();
         log.info("Check for crash report");
         reporter.checkForCrash(preferences.getProperty("website.crash"));
@@ -1348,6 +1445,9 @@ public class MainController extends BundleController implements NSApplication.De
     @Override
     public boolean validateMenuItem(final NSMenuItem item) {
         final Selector action = item.action();
+        if(action.equals(Foundation.selector("importBookmarksMenuClicked:"))) {
+            return bookmarkImportPanel == null && !importingBookmarks && BookmarkCollection.defaultCollection().isLoaded();
+        }
         if(action.equals(Foundation.selector("updateMenuClicked:"))) {
             if(updater.hasUpdatePrivileges()) {
                 if(item.representedObject() != null) {

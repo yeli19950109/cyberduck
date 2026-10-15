@@ -15,6 +15,8 @@ package ch.cyberduck.core.preferences;
  * GNU General Public License for more details.
  */
 
+import ch.cyberduck.binding.foundation.NSBundle;
+import ch.cyberduck.binding.foundation.NSObject;
 import ch.cyberduck.core.ApplescriptTerminalService;
 import ch.cyberduck.core.Factory;
 import ch.cyberduck.core.IOKitSleepPreventer;
@@ -60,9 +62,16 @@ public class ApplicationPreferences extends UserDefaultsPreferences {
     protected void setFactories() {
         super.setFactories();
 
-        this.setDefault("factory.supportdirectoryfinder.class", MigratingSecurityApplicationGroupSupportDirectoryFinder.class.getName());
+        // Avoid the resource finder here: Local defaults have not been initialized yet.
+        final NSObject forkDataFolder = NSBundle.mainBundle().infoDictionary().objectForKey("CyberduckForkDataFolder");
+        if(forkDataFolder != null) {
+            this.setDefault("CyberduckForkDataFolder", forkDataFolder.toString());
+        }
+        final Class<? extends SupportDirectoryFinder> support = forkDataFolder == null
+                ? MigratingSecurityApplicationGroupSupportDirectoryFinder.class : ForkSupportDirectoryFinder.class;
+        this.setDefault("factory.supportdirectoryfinder.class", support.getName());
         this.setDefault("factory.logdirectoryfinder.class", LibraryLogDirectoryFinder.class.getName());
-        this.setDefault("factory.localsupportdirectoryfinder.class", MigratingSecurityApplicationGroupSupportDirectoryFinder.class.getName());
+        this.setDefault("factory.localsupportdirectoryfinder.class", support.getName());
         this.setDefault("factory.applicationresourcesfinder.class", BundleApplicationResourcesFinder.class.getName());
         if(Factory.Platform.osversion.matches("(10|11|12)\\..*")) {
             this.setDefault("factory.applicationloginregistry.class", SharedFileListApplicationLoginRegistry.class.getName());

@@ -92,6 +92,7 @@ def prepare(args):
         "CFBundleVersion": release["revision"],
         "SUFeedURL": feed,
         "CyberduckForkUpdateFeed": feed,
+        "CyberduckForkDataFolder": "CyberSilverWolf",
         "SUPublicEDKey": key,
         "SUEnableAutomaticChecks": False,
         "SUExpectsDSASignature": False,

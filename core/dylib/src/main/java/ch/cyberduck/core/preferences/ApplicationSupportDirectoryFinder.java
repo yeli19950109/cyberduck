@@ -30,7 +30,15 @@ import org.rococoa.cocoa.foundation.NSUInteger;
 public class ApplicationSupportDirectoryFinder implements SupportDirectoryFinder {
     private static final Logger log = LogManager.getLogger(ApplicationSupportDirectoryFinder.class);
 
-    private final Preferences preferences = PreferencesFactory.get();
+    private final String application;
+
+    public ApplicationSupportDirectoryFinder() {
+        this(PreferencesFactory.get().getProperty("application.name"));
+    }
+
+    public ApplicationSupportDirectoryFinder(final String application) {
+        this.application = application;
+    }
 
     @Override
     public Local find() {
@@ -38,7 +46,6 @@ public class ApplicationSupportDirectoryFinder implements SupportDirectoryFinder
                 FoundationKitFunctions.NSSearchPathDirectory.NSApplicationSupportDirectory,
                 FoundationKitFunctions.NSSearchPathDomainMask.NSUserDomainMask,
                 true);
-        final String application = preferences.getProperty("application.name");
         if(directories.count().intValue() == 0) {
             log.error("Failed searching for application support directory");
             return new FinderLocal("~/Library/Application Support", application);
