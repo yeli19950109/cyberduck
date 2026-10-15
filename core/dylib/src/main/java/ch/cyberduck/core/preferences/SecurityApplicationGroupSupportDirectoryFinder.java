@@ -43,6 +43,9 @@ public class SecurityApplicationGroupSupportDirectoryFinder implements SupportDi
 
     @Override
     public Local find() {
+        if(PreferencesFactory.get().getDefault("CyberduckForkDataFolder") != null) {
+            return new ForkSupportDirectoryFinder().find();
+        }
         final NSURL group = NSFileManager.defaultManager().containerURLForSecurityApplicationGroupIdentifier(identifier);
         if(null == group) {
             log.warn("Missing com.apple.security.application-groups in sandbox entitlements");

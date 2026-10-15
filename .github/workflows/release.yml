@@ -8,6 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    if: github.repository == 'iterate-ch/cyberduck'
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +45,7 @@ jobs:
   # only. Uploaded as a `duck-*` artifact so the `cli`, `sftp` and `release` jobs
   # pick it up.
   source:
+    if: github.repository == 'iterate-ch/cyberduck'
     permissions:
       contents: read
       id-token: write
@@ -79,7 +81,7 @@ jobs:
 
   publish:
     needs: [ deploy, source ]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.repository == 'iterate-ch/cyberduck' }}
     uses: ./.github/workflows/publish.yml
     with:
       SPARKLE_FEED: release
@@ -89,7 +91,7 @@ jobs:
   # lives here rather than in the shared publish.yml.
   sftp:
     needs: [ deploy, source ]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.repository == 'iterate-ch/cyberduck' }}
     permissions:
       actions: read
       contents: read
@@ -132,7 +134,7 @@ jobs:
   # never blocks the release, and vice versa.
   release:
     needs: [ deploy, source ]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.repository == 'iterate-ch/cyberduck' }}
     permissions:
       contents: write
     runs-on: [ linux, x64 ]
@@ -189,7 +191,7 @@ jobs:
   # rather than in the shared publish.yml.
   chocolatey:
     needs: deploy
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.repository == 'iterate-ch/cyberduck' }}
     permissions:
       actions: read
       contents: read

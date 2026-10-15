@@ -45,6 +45,8 @@ public class ApplicationUserDefaultsPreferences extends ApplicationPreferences {
         // Parent defaults
         super.setDefaults();
 
+        this.setDefault("bookmark.import.onstartup", String.valueOf(false));
+
         this.setDefault(String.format("browser.column.%s", BrowserColumn.icon.name()), String.valueOf(true));
         this.setDefault(String.format("browser.column.%s.width", BrowserColumn.icon.name()), String.valueOf(20));
         this.setDefault(String.format("browser.column.%s", BrowserColumn.filename.name()), String.valueOf(true));

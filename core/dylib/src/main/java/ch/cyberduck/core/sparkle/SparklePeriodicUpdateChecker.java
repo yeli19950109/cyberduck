@@ -18,6 +18,7 @@ package ch.cyberduck.core.sparkle;
 import ch.cyberduck.binding.Delegate;
 import ch.cyberduck.binding.ProxyController;
 import ch.cyberduck.binding.foundation.NSBundle;
+import ch.cyberduck.binding.foundation.NSObject;
 import ch.cyberduck.core.Controller;
 import ch.cyberduck.core.PreferencesUseragentProvider;
 import ch.cyberduck.core.library.Native;
@@ -70,6 +71,16 @@ public class SparklePeriodicUpdateChecker extends AbstractPeriodicUpdateChecker 
             final NSError f = error.getValueAs(NSError.class);
             log.error("Failure {} starting updater", f);
         }
+    }
+
+    @Override
+    protected String getFeedUrl() {
+        // Fork packages must not inherit an official feed from existing user preferences.
+        final NSObject feed = NSBundle.mainBundle().objectForInfoDictionaryKey("CyberduckForkUpdateFeed");
+        if(feed != null) {
+            return feed.toString();
+        }
+        return super.getFeedUrl();
     }
 
     @Override
