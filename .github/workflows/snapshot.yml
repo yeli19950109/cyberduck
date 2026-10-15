@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    if: github.repository == 'iterate-ch/cyberduck'
     strategy:
       fail-fast: false
       matrix:
@@ -47,7 +48,7 @@ jobs:
   # appcast ahead of the archives it references.
   sftp:
     needs: deploy
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.repository == 'iterate-ch/cyberduck' }}
     permissions:
       actions: read
       contents: read
@@ -89,7 +90,7 @@ jobs:
 
   publish:
     needs: [ deploy, sftp ]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.repository == 'iterate-ch/cyberduck' }}
     uses: ./.github/workflows/publish.yml
     with:
       SPARKLE_FEED: nightly
@@ -99,7 +100,7 @@ jobs:
   # only, so it lives here rather than in the shared publish.yml.
   brew:
     needs: [ publish ]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.repository == 'iterate-ch/cyberduck' }}
     permissions:
       actions: read
       contents: read

@@ -881,20 +881,9 @@ public class MainController extends BundleController implements NSApplication.De
         this.loadBundle();
         final AbstractHostCollection bookmarks = BookmarkCollection.defaultCollection();
         final AbstractHostCollection sessions = SessionsCollection.defaultCollection();
-        this.background(new AbstractBackgroundAction<Void>() {
+        this.background(new BookmarkLoadingBackgroundAction(bookmarks, sessions, bookmarksSemaphore, preferences.getBoolean("browser.serialize")) {
             @Override
-            public Void run() throws BackgroundException {
-                if(preferences.getBoolean("browser.serialize")) {
-                    sessions.load();
-                }
-                // Load all bookmarks in background
-                bookmarks.load();
-                bookmarksSemaphore.countDown();
-                return null;
-            }
-
-            @Override
-            public void cleanup() {
+            public void cleanup(final Void result, final BackgroundException failure) {
                 for(Host host : sessions) {
                     log.info("New browser for saved session {}", host);
                     final BrowserController browser = newDocument(true, host.getUuid());
@@ -915,6 +904,14 @@ public class MainController extends BundleController implements NSApplication.De
                 sessions.clear();
                 // Set delegate for NSService
                 NSApplication.sharedApplication().setServicesProvider(MainController.this.id());
+                if(failure != null) {
+                    log.error("Failure loading saved connections", failure);
+                    MainController.this.alert(new SystemAlertController(NSAlert.alert(
+                            LocaleFactory.localizedString("Bookmarks"),
+                            String.format("%s\n%s\n\n%s", failure.getMessage(), failure.getDetail(),
+                                    LocaleFactory.localizedString("Allow access to your bookmarks in System Settings → Privacy & Security, then restart Cyberduck.")),
+                            LocaleFactory.localizedString("OK"), null, null)));
+                }
             }
         });
         this.background(new AbstractBackgroundAction<Void>() {
@@ -1316,6 +1313,9 @@ public class MainController extends BundleController implements NSApplication.De
 
         @Override
         public void cleanup() {
+            if(this.isCanceled()) {
+                return;
+            }
             for(ThirdpartyBookmarkCollection t : collections) {
                 t.filter(bookmarks);
                 if(t.isEmpty()) {

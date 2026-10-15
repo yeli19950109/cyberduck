@@ -3,36 +3,56 @@ name: macOS Installer
 on:
   workflow_dispatch:
   push:
+    branches: [master]
+    tags: ['v*-*']
+  pull_request:
     paths:
-      - 'osx/**'
+      - '**/src/**'
+      - '**/*.xml'
       - 'profiles/**'
-      - 's3/**'
-      - '*.xml'
+      - 'setup/**'
+      - '.github/scripts/**'
       - '.github/workflows/macos-package.yml'
+      - 'mise.toml'
 
 permissions:
   contents: read
 
+# Serialize release version allocation so the daily build number stays unique.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: macos-installer
+  cancel-in-progress: false
 
 jobs:
   package:
     runs-on: macos-latest
     timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Set up JDK 25
+      - name: Set up Temurin JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 25
           cache: maven
-      # verify builds the app without invoking the upstream installer target,
-      # which requires Developer ID certificates and Sparkle signing keys.
+      - name: Test version rules
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Determine release version
+        id: version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          args=(--output target/fork-release.json --github-output "$GITHUB_OUTPUT")
+          if [[ -n "$RELEASE_TAG" ]]; then
+            args+=(--tag "$RELEASE_TAG")
+          fi
+          python3 .github/scripts/macos_release.py version "${args[@]}"
       - name: Build app and run unit tests
         run: >-
           mvn --batch-mode --no-transfer-progress verify
@@ -42,36 +62,82 @@ jobs:
           SKIP_SIGN: 'true'
           SKIP_NOTARIZE: 'true'
           SPARKLE_FEED: ''
-      - name: Apply ad hoc signatures
+      - name: Configure fork version and update channel
+        run: >-
+          python3 .github/scripts/macos_release.py prepare
+          --metadata target/fork-release.json
+          --app osx/target/Cyberduck.app
+          --repository "$GITHUB_REPOSITORY"
+          --public-key setup/app/fork-update.pub
+      - name: Sign and package macOS app
+        run: bash .github/scripts/package-macos.sh target/fork-release.json
+      - name: Sign update feed
+        if: github.event_name != 'pull_request' && github.repository == 'yeli19950109/cyberduck'
+        env:
+          FORK_SPARKLE_PRIVATE_KEY: ${{ secrets.FORK_SPARKLE_PRIVATE_KEY }}
         shell: bash
         run: |
-          app=osx/target/Cyberduck.app
-          # Sign modified native libraries before their enclosing bundles.
-          # Signing Contents/MacOS executables directly also signs their bundle,
-          # which fails while nested plugins are still unsigned.
-          while IFS= read -r -d '' binary; do
-            codesign --force --sign - "$binary"
-          done < <(find "$app" -type f \( -name '*.dylib' -o -name '*.jnilib' -o -name jspawnhelper \) -print0)
-          codesign --force --deep --sign - "$app"
-          codesign --verify --deep --strict "$app"
-      - name: Package macOS installer
-        shell: bash
-        run: |
-          app=osx/target/Cyberduck.app
-          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
-          archive="Cyberduck-${version}-${GITHUB_SHA:0:8}"
-          mkdir -p osx/target/release
-          productbuild --component "$app" /Applications "osx/target/release/$archive.pkg"
-          ditto -c -k --sequesterRsrc --keepParent "$app" "osx/target/release/$archive.zip"
-          cd osx/target/release
-          shasum -a 256 "$archive.pkg" "$archive.zip" > SHA256SUMS.txt
+          umask 077
+          key="$RUNNER_TEMP/fork-update.pem"
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$FORK_SPARKLE_PRIVATE_KEY" > "$key"
+          python3 .github/scripts/macos_release.py appcast \
+            --metadata target/fork-release.json \
+            --directory osx/target/release \
+            --repository "$GITHUB_REPOSITORY" \
+            --private-key "$key"
       - name: Upload macOS installer
         uses: actions/upload-artifact@v7
         with:
-          name: Cyberduck-macOS-${{ github.sha }}
+          name: Cyberduck-macOS-${{ steps.version.outputs.version }}
           path: |
             osx/target/release/*.pkg
             osx/target/release/*.zip
             osx/target/release/SHA256SUMS.txt
+            osx/target/release/appcast.xml
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    needs: package
+    if: github.event_name != 'pull_request' && github.repository == 'yeli19950109/cyberduck'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: Cyberduck-macOS-${{ needs.package.outputs.version }}
+          path: dist
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.package.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        shell: bash
+        run: |
+          cat > release-notes.md <<EOF
+          Cyberduck $RELEASE_VERSION for macOS 26 or later (Intel and Apple Silicon).
+
+          Includes the quit donation prompt removal, configurable S3-compatible endpoints,
+          and recovery from bookmark loading failures without hanging on quit.
+
+          The PKG and ZIP use ad hoc application signatures and are not Apple-notarized.
+          Sparkle updates use this fork's independent Ed25519 signing key.
+          macOS may ask for access to existing Cyberduck bookmarks in its protected app group.
+
+          Commit: $GITHUB_SHA
+          Build: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          EOF
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > release-state.txt 2>/dev/null; then
+            if [[ "$(cat release-state.txt)" != true ]]; then
+              echo "Release $RELEASE_TAG is already published; keeping its existing assets."
+              exit 0
+            fi
+          else
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --draft \
+              --title "Cyberduck $RELEASE_VERSION" --notes-file release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest
