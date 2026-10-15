@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - 'osx/**'
+      - 'profiles/**'
+      - 's3/**'
       - '*.xml'
       - '.github/workflows/macos-package.yml'
 
