@@ -46,13 +46,12 @@ jobs:
         shell: bash
         run: |
           app=osx/target/Cyberduck.app
-          # Native libraries are modified during bundling. Sign them again so
-          # macOS can load them on Apple Silicon without a Developer ID.
+          # Sign modified native libraries before their enclosing bundles.
+          # Signing Contents/MacOS executables directly also signs their bundle,
+          # which fails while nested plugins are still unsigned.
           while IFS= read -r -d '' binary; do
-            if file -b "$binary" | grep -q 'Mach-O'; then
-              codesign --force --sign - "$binary"
-            fi
-          done < <(find "$app" -type f -print0)
+            codesign --force --sign - "$binary"
+          done < <(find "$app" -type f \( -name '*.dylib' -o -name '*.jnilib' -o -name jspawnhelper \) -print0)
           codesign --force --deep --sign - "$app"
           codesign --verify --deep --strict "$app"
       - name: Package macOS installer
