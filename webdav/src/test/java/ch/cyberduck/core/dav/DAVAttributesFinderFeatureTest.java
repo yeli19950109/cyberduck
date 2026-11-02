@@ -27,10 +27,12 @@ import ch.cyberduck.core.transfer.TransferStatus;
 import ch.cyberduck.core.vault.DefaultVaultRegistry;
 import ch.cyberduck.core.vault.VaultCredentials;
 import ch.cyberduck.core.vault.VaultVersion;
+import ch.cyberduck.test.IntegrationTest;
 
 import org.apache.commons.lang3.StringUtils;
 import org.joda.time.DateTime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -201,6 +203,7 @@ public class DAVAttributesFinderFeatureTest extends AbstractDAVTest {
     }
 
     @Test
+    @Category(IntegrationTest.class)
     public void testFindNoPropfind() throws Exception {
         final Host host = new Host(new DAVSSLProtocol(), "update.cyberduck.io");
         final DAVSession session = new DAVSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
