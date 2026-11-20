@@ -85,14 +85,15 @@
         <!-- Default project root. Overridden by directory-maven-plugin in the
              project-root-jenkins profile. -->
         <main.basedir>${maven.multiModuleProjectDirectory}</main.basedir>
+        <git.buildnumber.skip>false</git.buildnumber.skip>
         <argLine />
         <jna-version>5.14.0</jna-version>
         <jersey-version>2.38</jersey-version>
-        <jackson-version>2.22.4</jackson-version>
-        <jackson-annotations-version>2.22</jackson-annotations-version>
+        <jackson-version>2.23.0</jackson-version>
+        <jackson-annotations-version>2.23</jackson-annotations-version>
         <slf4j-version>2.0.0</slf4j-version>
         <log4j-version>2.26.1</log4j-version>
-        <bouncycastle-version>1.86</bouncycastle-version>
+        <bouncycastle-version>1.87</bouncycastle-version>
         <httpclient-version>4.5.14</httpclient-version>
         <google-http-client.version>2.2.0</google-http-client.version>
         <jwt.version>4.6.2</jwt.version>
@@ -135,7 +136,7 @@
             <dependency>
                 <groupId>ch.iterate.s3</groupId>
                 <artifactId>jets3t</artifactId>
-                <version>0.9.40</version>
+                <version>0.9.41</version>
             </dependency>
             <dependency>
                 <groupId>com.auth0</groupId>
@@ -505,7 +506,7 @@
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>build-helper-maven-plugin</artifactId>
-                    <version>3.7.0</version>
+                    <version>3.8.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -844,6 +845,7 @@
                 <configuration>
                     <repositoryDirectory>${main.basedir}</repositoryDirectory>
                     <runOnlyAtExecutionRoot>false</runOnlyAtExecutionRoot>
+                    <skip>${git.buildnumber.skip}</skip>
                 </configuration>
             </plugin>
             <plugin>
@@ -1130,6 +1132,19 @@
                     </plugins>
                 </pluginManagement>
             </build>
+        </profile>
+        <profile>
+            <id>git-worktree</id>
+            <activation>
+                <file>
+                    <missing>${maven.multiModuleProjectDirectory}/.git/HEAD</missing>
+                </file>
+            </activation>
+            <properties>
+                <git.buildnumber.skip>true</git.buildnumber.skip>
+                <git.revision>0</git.revision>
+                <git.commitsCount>0</git.commitsCount>
+            </properties>
         </profile>
     </profiles>
 </project>
