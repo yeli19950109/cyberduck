@@ -12,7 +12,7 @@ import ch.cyberduck.core.exception.SSLNegotiateException;
 import ch.cyberduck.core.features.Copy;
 import ch.cyberduck.core.features.Delete;
 import ch.cyberduck.core.features.Find;
-import ch.cyberduck.core.features.Headers;
+import ch.cyberduck.core.features.Metadata;
 import ch.cyberduck.core.features.Timestamp;
 import ch.cyberduck.core.features.Touch;
 import ch.cyberduck.core.features.UnixPermission;
@@ -22,8 +22,8 @@ import ch.cyberduck.core.proxy.Proxy;
 import ch.cyberduck.core.proxy.ProxyFinder;
 import ch.cyberduck.core.shared.DefaultHomeFinderService;
 import ch.cyberduck.core.shared.DefaultVersioningFeature;
-import ch.cyberduck.core.ssl.CertificateStoreX509KeyManager;
 import ch.cyberduck.core.ssl.CertificateStoreX509TrustManager;
+import ch.cyberduck.core.ssl.DefaultCertificateStoreX509KeyManager;
 import ch.cyberduck.core.ssl.DefaultTrustManagerHostnameCallback;
 import ch.cyberduck.core.ssl.DefaultX509KeyManager;
 import ch.cyberduck.core.ssl.DefaultX509TrustManager;
@@ -58,7 +58,7 @@ public class DAVSessionTest extends AbstractDAVTest {
         final Host host = new Host(new DAVSSLProtocol(), "localhost", 2121);
         final DAVSession session = new DAVSession(host,
                 new CertificateStoreX509TrustManager(new DisabledCertificateTrustCallback(), new DefaultTrustManagerHostnameCallback(host), new DefaultCertificateStore()),
-                new CertificateStoreX509KeyManager(new DisabledCertificateIdentityCallback(), host, new DefaultCertificateStore()));
+                new DefaultCertificateStoreX509KeyManager(new DisabledCertificateIdentityCallback(), host, new DefaultCertificateStore()));
         try {
             session.open(new DisabledProxyFinder(), HostKeyCallback.noop, LoginCallback.noop, CancelCallback.noop);
             session.login(LoginCallback.noop, CancelCallback.noop);
@@ -104,7 +104,7 @@ public class DAVSessionTest extends AbstractDAVTest {
         assertNull(session.getFeature(UnixPermission.class));
         assertNotNull(session.getFeature(Timestamp.class));
         assertNotNull(session.getFeature(Copy.class));
-        assertNotNull(session.getFeature(Headers.class));
+        assertNotNull(session.getFeature(Metadata.class));
         assertNull(session.getFeature(DistributionConfiguration.class));
         assertNotNull(session.getFeature(Touch.class));
     }
